@@ -1,103 +1,182 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type Note = {
+  id: number;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [selectedId, setSelectedId] = useState<number | "new" | null>(null);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const selectedNote = useMemo(() => {
+    if (selectedId === null || selectedId === "new") return null;
+    return notes.find((n) => n.id === selectedId) ?? null;
+  }, [notes, selectedId]);
+
+  async function fetchNotes() {
+    const res = await fetch("/api/notes");
+    const data = await res.json();
+    setNotes(data);
+  }
+
+  useEffect(() => {
+    fetchNotes();
+  }, []);
+
+  function startCreate() {
+    setSelectedId("new");
+    setTitle("");
+    setContent("");
+  }
+
+  function selectExisting(id: number) {
+    setSelectedId(id);
+    const note = notes.find((n) => n.id === id);
+    if (note) {
+      setTitle(note.title);
+      setContent(note.content);
+    }
+  }
+
+  async function saveNote(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      if (selectedId === "new") {
+        await fetch("/api/notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, content }),
+        });
+      } else if (typeof selectedId === "number") {
+        await fetch(`/api/notes/${selectedId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, content }),
+        });
+      }
+      await fetchNotes();
+      setSelectedId(null);
+      setTitle("");
+      setContent("");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteNote(id: number) {
+    setLoading(true);
+    try {
+      await fetch(`/api/notes/${id}`, { method: "DELETE" });
+      await fetchNotes();
+      if (selectedId === id) {
+        setSelectedId(null);
+        setTitle("");
+        setContent("");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="h-screen grid grid-cols-[280px_1fr]">
+      <aside className="border-r bg-gray-50 dark:bg-zinc-900 p-4 flex flex-col gap-3 overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-semibold">My Notes</h1>
+          <button
+            onClick={startCreate}
+            className="bg-blue-600 text-white px-3 py-1.5 rounded"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            New
+          </button>
         </div>
+        <ul className="space-y-1">
+          {notes.map((n) => (
+            <li key={n.id}>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => selectExisting(n.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    selectExisting(n.id);
+                  }
+                }}
+                className={`w-full text-left px-3 py-2 rounded hover:bg-gray-200 dark:hover:bg-zinc-800 ${selectedId === n.id ? "bg-gray-200 dark:bg-zinc-800" : ""}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium truncate">{n.title || "Untitled"}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteNote(n.id);
+                    }}
+                    className="text-red-600 text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{n.content}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </aside>
+      <main className="p-6 overflow-y-auto">
+        {selectedId === null && (
+          <div className="text-gray-600">Select a note on the left or create a new one.</div>
+        )}
+        {(selectedId === "new" || selectedNote) && (
+          <form onSubmit={saveNote} className="max-w-2xl space-y-4">
+            <input
+              type="text"
+              placeholder="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full border rounded p-3 text-lg"
+              required
+            />
+            <textarea
+              placeholder="Write your note..."
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              className="w-full border rounded p-3 min-h-[300px]"
+              required
+            />
+            <div className="flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={saving}
+                className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+              {typeof selectedId === "number" && (
+                <button
+                  type="button"
+                  onClick={() => deleteNote(selectedId)}
+                  disabled={loading}
+                  className="text-red-600 px-4 py-2 border border-red-600 rounded disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          </form>
+        )}
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
