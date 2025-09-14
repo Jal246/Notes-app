@@ -23,11 +23,25 @@ type Note = {
   updatedAt: string;
 };
 
+type DeletedNote = {
+  id: number;
+  title: string;
+  content: string;
+  pinned: boolean;
+  tags: string;
+  folderId: number | null;
+  folder: Folder | null;
+  originalId: number;
+  deletedAt: string;
+  expiresAt: string;
+};
+
 export default function Home() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [deletedNotes, setDeletedNotes] = useState<DeletedNote[]>([]);
   const [selectedId, setSelectedId] = useState<number | "new" | null>(null);
-  const [selectedFolder, setSelectedFolder] = useState<number | "uncategorized" | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<number | "uncategorized" | "history" | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [pinned, setPinned] = useState(false);
@@ -94,11 +108,11 @@ export default function Home() {
   async function fetchNotes() {
     try {
       const res = await fetch("/api/notes");
-      
+
       if (!res.ok) {
         throw new Error("Failed to fetch notes");
       }
-      
+
       const data = await res.json();
       setNotes(data);
     } catch (error) {
@@ -110,11 +124,11 @@ export default function Home() {
   async function fetchFolders() {
     try {
       const res = await fetch("/api/folders");
-      
+
       if (!res.ok) {
         throw new Error("Failed to fetch folders");
       }
-      
+
       const data = await res.json();
       setFolders(data);
     } catch (error) {
@@ -123,9 +137,26 @@ export default function Home() {
     }
   }
 
+  async function fetchDeletedNotes() {
+    try {
+      const res = await fetch("/api/history");
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch deleted notes");
+      }
+
+      const data = await res.json();
+      setDeletedNotes(data);
+    } catch (error) {
+      console.error("Error fetching deleted notes:", error);
+      setDeletedNotes([]);
+    }
+  }
+
   useEffect(() => {
     fetchNotes();
     fetchFolders();
+    fetchDeletedNotes();
   }, []);
 
   function startCreate() {
@@ -235,6 +266,7 @@ export default function Home() {
     try {
       await fetch(`/api/notes/${id}`, { method: "DELETE" });
       await fetchNotes();
+      await fetchDeletedNotes();
       if (selectedId === id) {
         setSelectedId(null);
         setTitle("");
@@ -249,7 +281,10 @@ export default function Home() {
     <div className="h-screen grid grid-cols-[280px_1fr]">
       <aside className="border-r bg-gray-50 dark:bg-zinc-900 p-4 flex flex-col gap-3 overflow-y-auto">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">My Notes</h1>
+          <div className="flex items-center gap-2">
+            <img src="/logo.svg" alt="NoteIt Logo" className="h-8 w-auto" />
+            <h1 className="text-xl font-semibold">NoteIt</h1>
+          </div>
           <button
             onClick={startCreate}
             className="bg-blue-600 text-white px-3 py-1.5 rounded"
@@ -353,7 +388,63 @@ export default function Home() {
               + New Folder
             </button>
           )}
+
+          <div
+            className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer ${selectedFolder === "history" ? "bg-blue-100 dark:bg-blue-900" : "hover:bg-gray-100 dark:hover:bg-zinc-800"
+              }`}
+            onClick={() => setSelectedFolder("history")}
+          >
+            <span className="text-sm font-medium">🗂️ Recently Deleted</span>
+            <span className="text-xs text-gray-500">{deletedNotes.length}</span>
+          </div>
         </div>
+
+        {/* History Section */}
+        {selectedFolder === "history" && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 px-2">Recently Deleted Notes</h3>
+            <div className="space-y-1">
+              {deletedNotes.map((note) => (
+                <div key={note.id} className="px-3 py-2 bg-gray-100 dark:bg-zinc-800 rounded">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium truncate block">{note.title || "Untitled"}</span>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{note.content}</p>
+                      <div className="text-xs text-gray-500 mt-1">
+                        <div>Deleted: {new Date(note.deletedAt).toLocaleDateString()}</div>
+                        <div>Expires: {new Date(note.expiresAt).toLocaleDateString()}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/history/${note.id}`, { method: "POST" });
+                          if (res.ok) {
+                            await fetchNotes();
+                            await fetchDeletedNotes();
+                          }
+                        } catch (error) {
+                          console.error("Failed to restore note:", error);
+                        }
+                      }}
+                      className="text-green-600 hover:text-green-800 text-sm px-2 py-1 bg-green-100 hover:bg-green-200 rounded"
+                      title="Restore note"
+                    >
+                      Restore
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {deletedNotes.length === 0 && (
+                <div className="px-3 py-4 text-center text-gray-500 text-sm">
+                  No recently deleted notes
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Notes List */}
         <div className="space-y-3">
           {groupedNotes.map(([monthYear, monthNotes]) => (
             <div key={monthYear} className="space-y-1">

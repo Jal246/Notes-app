@@ -17,6 +17,7 @@ model Folder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   notes     Note[]
+  deletedNotes DeletedNote[]
 }
 
 model Note {
@@ -29,4 +30,17 @@ model Note {
   folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model DeletedNote {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String
+  pinned    Boolean  @default(false)
+  tags      String   @default("")
+  folderId  Int?
+  folder    Folder?  @relation(fields: [folderId], references: [id])
+  originalId Int     @unique
+  deletedAt DateTime @default(now())
+  expiresAt DateTime
 }
