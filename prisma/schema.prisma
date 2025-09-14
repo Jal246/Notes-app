@@ -10,10 +10,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Folder {
+  id        Int      @id @default(autoincrement())
+  name      String
+  color     String   @default("#3B82F6")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  notes     Note[]
+}
+
 model Note {
   id        Int      @id @default(autoincrement())
   title     String
   content   String
+  pinned    Boolean  @default(false)
+  tags      String   @default("")
+  folderId  Int?
+  folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
